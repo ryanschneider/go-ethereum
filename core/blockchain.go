@@ -113,7 +113,8 @@ type BlockChain struct {
 	validator Validator // block and state validator interface
 	vmConfig  vm.Config
 
-	badBlocks *lru.Cache // Bad block cache
+	badBlocks *lru.Cache   // Bad block cache
+	currentTd atomic.Value // The total difficulty
 }
 
 // NewBlockChain returns a fully initialised block chain using information
@@ -139,6 +140,7 @@ func NewBlockChain(chainDb ethdb.Database, config *params.ChainConfig, engine co
 		vmConfig:     vmConfig,
 		badBlocks:    badBlocks,
 	}
+
 	bc.SetValidator(NewBlockValidator(config, bc, engine))
 	bc.SetProcessor(NewStateProcessor(config, bc, engine))
 
@@ -167,6 +169,13 @@ func NewBlockChain(chainDb ethdb.Database, config *params.ChainConfig, engine co
 			}
 		}
 	}
+	currentBlock := bc.CurrentBlock()
+	td := big.NewInt(0)
+	if currentBlock != nil {
+		td.Set(bc.GetTd(currentBlock.Hash(), currentBlock.NumberU64()))
+	}
+	bc.currentTd.Store(td)
+	log.Info("Set initial td", "td", td)
 	// Take ownership of this particular state
 	go bc.update()
 	return bc, nil
@@ -327,6 +336,13 @@ func (bc *BlockChain) CurrentBlock() *types.Block {
 	defer bc.mu.RUnlock()
 
 	return bc.currentBlock
+}
+
+// CurrentTD returns ( a copy of) the current difficulty. This method does not
+// use any locks, and the information may be mildly stale, since a new block
+// insertion may be in progress
+func (bc *BlockChain) CurrentTd() *big.Int {
+	return new(big.Int).Set(bc.currentTd.Load().(*big.Int))
 }
 
 // CurrentFastBlock retrieves the current fast-sync head block of the canonical
@@ -842,8 +858,15 @@ func (bc *BlockChain) WriteBlockAndState(block *types.Block, receipts []*types.R
 	} else {
 		status = SideStatTy
 	}
+
 	if err := batch.Write(); err != nil {
 		return NonStatTy, err
+	}
+
+	//Creating a new bigint here, to be sure not to violate the rule below:
+	//  Once Store has been called, a Value must not be copied.
+	if externTd.Cmp(localTd) > 0 {
+		bc.currentTd.Store(new(big.Int).Set(externTd))
 	}
 
 	// Set new head.
@@ -851,6 +874,7 @@ func (bc *BlockChain) WriteBlockAndState(block *types.Block, receipts []*types.R
 		bc.insert(block)
 	}
 	bc.futureBlocks.Remove(block.Hash())
+
 	return status, nil
 }
 
