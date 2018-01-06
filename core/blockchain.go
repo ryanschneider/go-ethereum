@@ -113,8 +113,9 @@ type BlockChain struct {
 	validator Validator // block and state validator interface
 	vmConfig  vm.Config
 
-	badBlocks *lru.Cache   // Bad block cache
-	currentTd atomic.Value // The total difficulty
+	badBlocks     *lru.Cache   // Bad block cache
+	currentTd     atomic.Value // The total difficulty
+	currentNumber atomic.Value // The total difficulty
 }
 
 // NewBlockChain returns a fully initialised block chain using information
@@ -171,11 +172,16 @@ func NewBlockChain(chainDb ethdb.Database, config *params.ChainConfig, engine co
 	}
 	currentBlock := bc.CurrentBlock()
 	td := big.NewInt(0)
+	cn := big.NewInt(0)
+
 	if currentBlock != nil {
 		td.Set(bc.GetTd(currentBlock.Hash(), currentBlock.NumberU64()))
+		cn.Set(currentBlock.Number())
 	}
 	bc.currentTd.Store(td)
-	log.Info("Set initial td", "td", td)
+	bc.currentNumber.Store(cn)
+	log.Info("Set initial td/cn", "td", td, "cn", cn)
+
 	// Take ownership of this particular state
 	go bc.update()
 	return bc, nil
@@ -343,6 +349,13 @@ func (bc *BlockChain) CurrentBlock() *types.Block {
 // insertion may be in progress
 func (bc *BlockChain) CurrentTd() *big.Int {
 	return new(big.Int).Set(bc.currentTd.Load().(*big.Int))
+}
+
+// CurrentNumber returns ( a copy of) the current block number. This method does not
+// use any locks, and the information may be mildly stale, since a new block
+// insertion may be in progress
+func (bc *BlockChain) CurrentNumber() *big.Int {
+	return new(big.Int).Set(bc.currentNumber.Load().(*big.Int))
 }
 
 // CurrentFastBlock retrieves the current fast-sync head block of the canonical
@@ -868,6 +881,8 @@ func (bc *BlockChain) WriteBlockAndState(block *types.Block, receipts []*types.R
 	if externTd.Cmp(localTd) > 0 {
 		bc.currentTd.Store(new(big.Int).Set(externTd))
 	}
+
+	bc.currentNumber.Store(new(big.Int).Set(block.Number()))
 
 	// Set new head.
 	if status == CanonStatTy {

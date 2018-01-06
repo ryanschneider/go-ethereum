@@ -196,13 +196,11 @@ func (pm *ProtocolManager) synchronise(peer *peer) {
 	// Run the sync cycle, and disable fast sync if we've went past the pivot block
 	err := pm.downloader.Synchronise(peer.id, pHead, pTd, mode)
 
-	if currentBlock == nil {
-		currentBlock = pm.blockchain.CurrentBlock()
-	}
+	cn := pm.blockchain.CurrentNumber().Uint64()
 
 	if atomic.LoadUint32(&pm.fastSync) == 1 {
 		// Disable fast sync if we indeed have something in our chain
-		if currentBlock.NumberU64() > 0 {
+		if cn > 0 {
 			log.Info("Fast sync complete, auto disabling")
 			atomic.StoreUint32(&pm.fastSync, 0)
 		}
@@ -214,13 +212,16 @@ func (pm *ProtocolManager) synchronise(peer *peer) {
 
 	atomic.StoreUint32(&pm.acceptTxs, 1) // Mark initial sync done
 
-	if currentBlock.NumberU64() > 0 {
+	if cn > 0 {
 		// We've completed a sync cycle, notify all peers of new state. This path is
 		// essential in star-topology networks where a gateway node needs to notify
 		// all its out-of-date peers of the availability of a new block. This failure
 		// scenario will most often crop up in private and hackathon networks with
 		// degenerate connectivity, but it should be healthy for the mainnet too to
 		// more reliably update peers or the local TD state.
+		if currentBlock == nil {
+			currentBlock = pm.blockchain.CurrentBlock()
+		}
 		go pm.BroadcastBlock(currentBlock, false)
 	}
 }
