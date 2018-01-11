@@ -662,7 +662,7 @@ func (s *PublicBlockChainAPI) EstimateGas(ctx context.Context, args CallArgs) (h
 		hi = uint64(args.Gas)
 	} else {
 		// Retrieve the current pending block to act as the gas ceiling
-		block, err := s.b.BlockByNumber(ctx, rpc.PendingBlockNumber)
+		block, err := s.b.BlockByNumber(ctx, rpc.LatestBlockNumber)
 		if err != nil {
 			return 0, err
 		}
@@ -674,10 +674,12 @@ func (s *PublicBlockChainAPI) EstimateGas(ctx context.Context, args CallArgs) (h
 	executable := func(gas uint64) bool {
 		args.Gas = hexutil.Uint64(gas)
 
-		_, _, failed, err := s.doCall(ctx, args, rpc.PendingBlockNumber, vm.Config{})
+		_, gasUsed, failed, err := s.doCall(ctx, args, rpc.LatestBlockNumber, vm.Config{})
 		if err != nil || failed {
 			return false
 		}
+
+		log.Info("executed doCall", "gas", gas, "gasUsed", gasUsed)
 		return true
 	}
 	// Execute the binary search and hone in on an executable gas limit
