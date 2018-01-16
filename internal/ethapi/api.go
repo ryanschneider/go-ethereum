@@ -976,10 +976,12 @@ func (s *PublicTransactionPoolAPI) GetTransactionByHash(ctx context.Context, has
 	if tx, blockHash, blockNumber, index := core.GetTransaction(s.b.ChainDb(), hash); tx != nil {
 		return newRPCTransaction(tx, blockHash, blockNumber, index)
 	}
-	// No finalized transaction, try to retrieve it from the pool
-	if tx := s.b.GetPoolTransaction(hash); tx != nil {
-		return newRPCPendingTransaction(tx)
-	}
+	/*
+		// No finalized transaction, try to retrieve it from the pool
+		if tx := s.b.GetPoolTransaction(hash); tx != nil {
+			return newRPCPendingTransaction(tx)
+		}
+	*/
 	// Transaction unknown, return as such
 	return nil
 }
