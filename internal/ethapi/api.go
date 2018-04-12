@@ -729,6 +729,67 @@ func (s *PublicBlockChainAPI) EstimateGas(ctx context.Context, args CallArgs) (h
 	return hexutil.Uint64(hi), nil
 }
 
+// SimulateTransaction returns the results of if
+func (s *PublicBlockChainAPI) SimulateTransaction(ctx context.Context, args CallArgs, blockNr rpc.BlockNumber) (*SimulateTransactionResult, error) {
+
+	state, header, err := s.b.StateAndHeaderByNumber(ctx, blockNr)
+	if state == nil || err != nil {
+		return nil, err
+	}
+
+	// Set sender address or use a default if none specified
+	addr := args.From
+	if addr == (common.Address{}) {
+		if wallets := s.b.AccountManager().Wallets(); len(wallets) > 0 {
+			if accounts := wallets[0].Accounts(); len(accounts) > 0 {
+				addr = accounts[0].Address
+			}
+		}
+	}
+	// Set default gas & gas price if none were set
+	gas, gasPrice := uint64(args.Gas), args.GasPrice.ToInt()
+	if gas == 0 || gas > math.MaxUint64/2 {
+		gas = math.MaxUint64 / 2
+	}
+	if gasPrice.Sign() == 0 {
+		gasPrice = new(big.Int).SetUint64(defaultGasPrice)
+	}
+
+	tx := types.NewTransaction(0, *args.To, args.Value.ToInt(), header.GasLimit, gasPrice, args.Data)
+	tx.ChainId()
+	gp := new(core.GasPool).AddGas(math.MaxUint64)
+	receipt, result, usedGas, err := s.b.SimulateTransaction(&addr, gas, gp, state, header, tx, &header.GasUsed)
+	if err != nil {
+		return nil, err
+	}
+
+	logs := receipt.Logs
+	if logs == nil {
+		logs = []*types.Log{}
+	}
+
+	return &SimulateTransactionResult{
+		TxHash:          receipt.TxHash,
+		ReturnValue:     hexutil.Encode(result),
+		ContractAddress: receipt.ContractAddress,
+		GasUsed:         hexutil.EncodeUint64(usedGas),
+		Logs:            logs,
+		//Bloom:           receipt.Bloom,
+		ErrorCode: nil,
+	}, nil
+}
+
+type SimulateTransactionResult struct {
+	TxHash          common.Hash    `json:"transactionHash" gencodec:"required"`
+	ContractAddress common.Address `json:"contractAddress"`
+	GasUsed         string         `json:"gasUsed" gencodec:"required"`
+	ReturnValue     string         `json:"returnValue" gencodec:"required"`
+
+	//Bloom     types.Bloom  `json:"logsBloom"         gencodec:"required"`
+	Logs      []*types.Log `json:"logs"              gencodec:"required"`
+	ErrorCode *string      `json:"errorCode"`
+}
+
 // ExecutionResult groups all structured logs emitted by the EVM
 // while replaying a transaction in debug mode as well as transaction
 // execution status, the amount of gas used and the return value

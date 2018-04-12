@@ -128,6 +128,10 @@ func (b *EthApiBackend) GetEVM(ctx context.Context, msg core.Message, state *sta
 	return vm.NewEVM(context, state, b.eth.chainConfig, vmCfg), vmError, nil
 }
 
+func (b *EthApiBackend) SimulateTransaction(from *common.Address, gas uint64, gp *core.GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64) (*types.Receipt, []byte, uint64, error) {
+	return core.SimulateTransaction(b.eth.chainConfig, b.eth.blockchain, from, gas, gp, statedb, header, tx, usedGas, vm.Config{})
+}
+
 func (b *EthApiBackend) SubscribeRemovedLogsEvent(ch chan<- core.RemovedLogsEvent) event.Subscription {
 	return b.eth.BlockChain().SubscribeRemovedLogsEvent(ch)
 }
