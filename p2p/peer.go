@@ -383,6 +383,8 @@ func (rw *protoRW) WriteMsg(msg Msg) (err error) {
 		return newPeerError(errInvalidMsgCode, "not handled")
 	}
 	msg.Code += rw.offset
+	timer := time.NewTimer(300 * time.Millisecond)
+
 	select {
 	case <-rw.wstart:
 		err = rw.w.WriteMsg(msg)
@@ -393,6 +395,9 @@ func (rw *protoRW) WriteMsg(msg Msg) (err error) {
 		rw.werr <- err
 	case <-rw.closed:
 		err = fmt.Errorf("shutting down")
+	case <-timer.C:
+		// peer isnt ready yet, just drop the message
+		err = fmt.Errorf("timed out waiting for unready peer")
 	}
 	return err
 }
