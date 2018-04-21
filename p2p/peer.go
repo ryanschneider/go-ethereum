@@ -395,6 +395,9 @@ func (rw *protoRW) WriteMsg(msg Msg) (err error) {
 		rw.werr <- err
 	case <-rw.closed:
 		err = fmt.Errorf("shutting down")
+	default:
+		// peer isnt ready yet, just drop the message
+		log.Warn("Dropping msg for unready peer")
 	}
 	return err
 }
