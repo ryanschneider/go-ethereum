@@ -130,6 +130,7 @@ type blockChain interface {
 type TxPoolConfig struct {
 	Locals    []common.Address // Addresses that should be treated by default as local
 	NoLocals  bool             // Whether local transaction handling should be disabled
+	NoRemotes bool             // Whether remote transactions should be added to the pool
 	Journal   string           // Journal of local transactions to survive node restarts
 	Rejournal time.Duration    // Time interval to regenerate the local transaction journal
 
@@ -743,11 +744,17 @@ func (pool *TxPool) AddLocal(tx *types.Transaction) error {
 // This method is used to add transactions from the p2p network and does not wait for pool
 // reorganization and internal event propagation.
 func (pool *TxPool) AddRemotes(txs []*types.Transaction) []error {
+	if pool.config.NoRemotes {
+		return make([]error, len(txs))
+	}
 	return pool.addTxs(txs, false, false)
 }
 
 // This is like AddRemotes, but waits for pool reorganization. Tests use this method.
 func (pool *TxPool) AddRemotesSync(txs []*types.Transaction) []error {
+	if pool.config.NoRemotes {
+		return make([]error, len(txs))
+	}
 	return pool.addTxs(txs, false, true)
 }
 
@@ -762,6 +769,9 @@ func (pool *TxPool) addRemoteSync(tx *types.Transaction) error {
 //
 // Deprecated: use AddRemotes
 func (pool *TxPool) AddRemote(tx *types.Transaction) error {
+	if pool.config.NoRemotes {
+		return nil
+	}
 	errs := pool.AddRemotes([]*types.Transaction{tx})
 	return errs[0]
 }
