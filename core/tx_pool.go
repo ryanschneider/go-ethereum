@@ -677,7 +677,12 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 	}
 	pool.journalTx(from, tx)
 
-	log.Trace("Pooled new future transaction", "hash", hash, "from", from, "to", tx.To())
+	if replace {
+		log.Trace("Pooled replacement future transaction", "hash", hash, "from", from, "to", tx.To())
+	} else {
+		log.Trace("Pooled new future transaction", "hash", hash, "from", from, "to", tx.To())
+	}
+
 	return replace, nil
 }
 
@@ -935,6 +940,7 @@ func (pool *TxPool) promoteExecutables(accounts []common.Address) {
 	for _, addr := range accounts {
 		list := pool.queue[addr]
 		if list == nil {
+			log.Trace("Skipping non existing account", "addr", addr)
 			continue // Just in case someone calls with a non existing account
 		}
 		// Drop all transactions that are deemed too old (low nonce)
