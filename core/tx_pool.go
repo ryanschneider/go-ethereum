@@ -660,7 +660,9 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 		log.Trace("Pooled new executable transaction", "hash", hash, "from", from, "to", tx.To())
 
 		// We've directly injected a replacement transaction, notify subsystems
-		go pool.txFeed.Send(TxPreEvent{tx})
+		go func(tx *types.Transaction) {
+			pool.promotedTxCh <- TxPreEvent{tx}
+		}(tx)
 
 		return old != nil, nil
 	}
