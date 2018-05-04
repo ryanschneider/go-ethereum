@@ -33,7 +33,6 @@ import (
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
 	"gopkg.in/karalabe/cookiejar.v2/collections/prque"
-	"sync/atomic"
 )
 
 const (
@@ -206,7 +205,7 @@ type TxPool struct {
 	pending map[common.Address]*txList   // All currently processable transactions
 	queue   map[common.Address]*txList   // Queued but non-processable transactions
 	beats   map[common.Address]time.Time // Last heartbeat from each known account
-	all     txLookup                     // All transactions to allow lookups
+	all     *txLookup                    // All transactions to allow lookups
 	priced  *txPricedList                // All transactions sorted by price
 
 	wg sync.WaitGroup // for shutdown sync
@@ -229,13 +228,13 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		pending:      make(map[common.Address]*txList),
 		queue:        make(map[common.Address]*txList),
 		beats:        make(map[common.Address]time.Time),
-		all:          txLookup{},
+		all:          newTxLookup(),
 		chainHeadCh:  make(chan ChainHeadEvent, chainHeadChanSize),
 		gasPrice:     new(big.Int).SetUint64(config.PriceLimit),
 		promotedTxCh: make(chan TxPreEvent, config.GlobalSlots),
 	}
 	pool.locals = newAccountSet(pool.signer)
-	pool.priced = newTxPricedList(&pool.all)
+	pool.priced = newTxPricedList(pool.all)
 	pool.reset(nil, chain.CurrentBlock().Header())
 
 	// If local transactions and journaling is enabled, load from disk
@@ -1186,56 +1185,65 @@ func (as *accountSet) add(addr common.Address) {
 
 // txLookup is used to track all transactions to allow lookups without contention
 type txLookup struct {
-	all   sync.Map // concurrent map[common.Hash]*types.Transaction
-	count int32
+	all  map[common.Hash]*types.Transaction
+	lock sync.RWMutex
 }
 
-// returns the lookup as a standard map
-func (t *txLookup) Transactions() []*types.Transaction {
-	txs := make([]*types.Transaction, t.Count())
-	i := 0
-	t.all.Range(func(key, value interface{}) bool {
-		txs[i] = value.(*types.Transaction)
-		i += 1
-		return true
-	})
-	return txs
+func newTxLookup() *txLookup {
+	return &txLookup{
+		all: make(map[common.Hash]*types.Transaction),
+	}
+}
+
+// calls f on each key and value present in the map
+func (t *txLookup) Range(f func(hash common.Hash, tx *types.Transaction) bool) {
+	t.lock.RLock()
+	defer t.lock.RUnlock()
+
+	for key, value := range t.all {
+		if !f(key, value) {
+			break
+		}
+	}
 }
 
 // returns a transaction if it exists in the lookup, or nil if not found
 func (t *txLookup) Get(hash common.Hash) *types.Transaction {
-	tx, _ := t.Find(hash)
-	return tx
+	t.lock.RLock()
+	defer t.lock.RUnlock()
+
+	return t.all[hash]
 }
 
 // returns a transaction if it exists in the lookup, and a bool indicating if it was found
 func (t *txLookup) Find(hash common.Hash) (*types.Transaction, bool) {
-	v, found := t.all.Load(hash)
-	if !found {
-		return nil, false
-	}
-	return v.(*types.Transaction), true
+	t.lock.RLock()
+	defer t.lock.RUnlock()
+
+	value, ok := t.all[hash]
+	return value, ok
 }
 
 // returns the current number of items in the lookup
 func (t *txLookup) Count() int {
-	return int(atomic.LoadInt32(&t.count))
+	t.lock.RLock()
+	defer t.lock.RUnlock()
+
+	return len(t.all)
 }
 
 // add a transaction to the lookup
 func (t *txLookup) Add(tx *types.Transaction) {
-	_, found := t.all.Load(tx.Hash())
-	if !found {
-		atomic.AddInt32(&t.count, 1)
-	}
-	t.all.Store(tx.Hash(), tx)
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	t.all[tx.Hash()] = tx
 }
 
 // remove a transaction from the lookup
 func (t *txLookup) Remove(hash common.Hash) {
-	_, found := t.all.Load(hash)
-	if found {
-		atomic.AddInt32(&t.count, -1)
-	}
-	t.all.Delete(hash)
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	delete(t.all, hash)
 }

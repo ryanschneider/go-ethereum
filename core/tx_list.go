@@ -22,6 +22,7 @@ import (
 	"math/big"
 	"sort"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 )
@@ -427,9 +428,10 @@ func (l *txPricedList) Removed() {
 	reheap := make(priceHeap, 0, l.all.Count())
 
 	l.stales, l.items = 0, &reheap
-	for _, tx := range l.all.Transactions() {
+	l.all.Range(func(hash common.Hash, tx *types.Transaction) bool {
 		*l.items = append(*l.items, tx)
-	}
+		return true
+	})
 	heap.Init(l.items)
 }
 
