@@ -638,9 +638,7 @@ running:
 			// This channel is used by RemoveTrustedPeer to remove an enode
 			// from the trusted node set
 			srv.log.Debug("Removing trusted node", "node", n)
-			if _, ok := trusted[n.ID]; ok {
-				delete(trusted, n.ID)
-			}
+			delete(trusted, n.ID)
 			// Unmark any already-connected peer as trusted
 			if p, ok := peers[n.ID]; ok {
 				p.rw.flags &= ^trustedConn
