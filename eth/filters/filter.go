@@ -20,6 +20,10 @@ import (
 	"context"
 	"errors"
 	"math/big"
+	"sync"
+	"time"
+
+	"golang.org/x/time/rate"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
@@ -59,6 +63,11 @@ type Filter struct {
 	begin, end int64       // Range interval if filtering multiple blocks
 
 	matcher *bloombits.Matcher
+
+	// Rate limiting to prevent a long query from consuming too many resources
+	rateLimter     *rate.Limiter
+	rateLimitStart *time.Time
+	rateLimitOnce  sync.Once
 }
 
 // NewRangeFilter creates a new filter which uses a bloom filter on blocks to
@@ -244,6 +253,9 @@ func (f *Filter) blockLogs(ctx context.Context, header *types.Header) (logs []*t
 // checkMatches checks if the receipts belonging to the given header contain any log events that
 // match the filter criteria. This function is called when the bloom filter signals a potential match.
 func (f *Filter) checkMatches(ctx context.Context, header *types.Header) (logs []*types.Log, err error) {
+	// prevent overly broad queries from consuming too many resources
+	f.rateLimit(ctx)
+
 	// Get the logs of the block
 	logsList, err := f.backend.GetLogs(ctx, header.Hash())
 	if err != nil {
@@ -270,6 +282,20 @@ func (f *Filter) checkMatches(ctx context.Context, header *types.Header) (logs [
 		return logs, nil
 	}
 	return nil, nil
+}
+
+func (f *Filter) rateLimit(ctx context.Context) error {
+	f.rateLimitOnce.Do(func() {
+		t := time.Now().Add(1 * time.Second)
+		f.rateLimitStart = &t
+		f.rateLimter = rate.NewLimiter(rate.Every(1*time.Millisecond), 1)
+	})
+
+	if time.Now().Before(*f.rateLimitStart) {
+		return nil
+	}
+
+	return f.rateLimter.Wait(ctx)
 }
 
 func includes(addresses []common.Address, a common.Address) bool {

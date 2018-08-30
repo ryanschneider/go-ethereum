@@ -874,6 +874,12 @@
 			"revisionTime": "2017-12-24T20:31:28Z"
 		},
 		{
+			"checksumSHA1": "HoCvrd3hEhsFeBOdEw7cbcfyk50=",
+			"path": "golang.org/x/time/rate",
+			"revision": "fbb02b2291d28baffd63558aa44b4b56f178d650",
+			"revisionTime": "2018-04-12T16:56:04Z"
+		},
+		{
 			"checksumSHA1": "ikor+YKJu2eKwyFteBWhsb8IGy8=",
 			"path": "golang.org/x/tools/go/ast/astutil",
 			"revision": "be0fcc31ae2332374e800dfff29b721c585b35df",
