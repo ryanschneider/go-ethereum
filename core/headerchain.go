@@ -37,9 +37,9 @@ import (
 )
 
 const (
-	headerCacheLimit = 512
+	headerCacheLimit = 65536
 	tdCacheLimit     = 1024
-	numberCacheLimit = 2048
+	numberCacheLimit = 65536
 )
 
 // HeaderChain implements the basic block header chain logic that is shared by

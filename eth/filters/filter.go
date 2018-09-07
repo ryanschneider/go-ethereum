@@ -61,8 +61,9 @@ type Filter struct {
 	addresses []common.Address
 	topics    [][]common.Hash
 
-	block      common.Hash // Block hash if filtering a single block
-	begin, end int64       // Range interval if filtering multiple blocks
+	block        common.Hash // Block hash if filtering a single block
+	begin, end   int64       // Range interval if filtering multiple blocks
+	hits, misses int64       // bloom filter hits and misses
 
 	matcher *bloombits.Matcher
 
@@ -172,6 +173,7 @@ func (f *Filter) Logs(ctx context.Context) ([]*types.Log, error) {
 	}
 	rest, err := f.unindexedLogs(ctx, end)
 	logs = append(logs, rest...)
+	log.Info("done", "hits", f.hits, "misses", f.misses)
 	return logs, err
 }
 
@@ -284,6 +286,9 @@ func (f *Filter) checkMatches(ctx context.Context, header *types.Header) (logs [
 			}
 			logs = filterLogs(unfiltered, nil, nil, f.addresses, f.topics)
 		}
+
+		atomic.AddInt64(&f.hits, int64(len(logs)))
+		atomic.AddInt64(&f.misses, int64(len(unfiltered)-len(logs)))
 		return logs, nil
 	}
 	return nil, nil
@@ -295,7 +300,7 @@ func (f *Filter) rateLimit(ctx context.Context) error {
 		f.rateLimitStart = &t
 		f.rateLimiter = rate.NewLimiter(rate.Every(100*time.Millisecond), 1)
 		f.rateLimitCount = 0
-		log.Info("Starting rate limiting", "range", f.end-f.begin, "start", t.String())
+		log.Info("Starting rate limiting", "begin", f.begin, "end", f.end)
 	})
 
 	if time.Now().Before(*f.rateLimitStart) {
@@ -304,7 +309,8 @@ func (f *Filter) rateLimit(ctx context.Context) error {
 
 	c := atomic.AddUint64(&f.rateLimitCount, 1)
 	if c > 1000 {
-		log.Info("Rate limiting", "elapsed", time.Now().Sub(*f.rateLimitStart).String(), "range", f.end-f.begin)
+		log.Info("Rate limiting", "elapsed", time.Now().Sub(*f.rateLimitStart).String(), "begin", f.begin, "end", f.end)
+		atomic.StoreUint64(&f.rateLimitCount, 0)
 		return f.rateLimiter.Wait(ctx)
 	}
 
