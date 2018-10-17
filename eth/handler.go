@@ -307,6 +307,13 @@ func (pm *ProtocolManager) handle(p *peer) error {
 			}
 		}()
 	}
+
+	// Check for the blacklisted ropsten block by asking for the next one, we'll compare the ParentHash
+	if true {
+		if err := p.RequestHeadersByNumber(uint64(4230605+1), 1, 0, false); err != nil {
+			return err
+		}
+	}
 	// main loop. handle incoming messages.
 	for {
 		if err := pm.handleMsg(p); err != nil {
@@ -447,6 +454,13 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 				p.forkDrop.Stop()
 				p.forkDrop = nil
 				return nil
+			}
+		}
+
+		// Check for any explicitly blacklisted blocks here
+		for _, header := range headers {
+			if header.ParentHash.String() == "0xc358b4fb016f7cc1402619f292c92a5e58a473ef5243db00d3c59b3b9b7cb827" {
+				return errors.New(fmt.Sprintf("header contains blacklisted block ParentHash %s", header.ParentHash))
 			}
 		}
 		// Filter out any explicitly requested headers, deliver the rest to the downloader
