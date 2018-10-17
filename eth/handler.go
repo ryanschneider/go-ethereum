@@ -307,6 +307,31 @@ func (pm *ProtocolManager) handle(p *peer) error {
 			}
 		}()
 	}
+
+	// Check for the blacklisted ropsten block by asking for the next one, we'll compare the ParentHash
+	// HACK: but dont check the bootnodes
+	check := true
+	for _, b := range params.TestnetBootnodes {
+		if b == p.Node().String() {
+			p.Log().Debug("skipping blacklist check for bootnode")
+			check = false
+			break
+		}
+	}
+
+	if check {
+		p.Log().Debug("asking for blacklisted block headers")
+		if err := p.RequestHeadersByNumber(uint64(4230605+1), 1, 0, false); err != nil {
+			p.Log().Debug("err asking for blacklisted block header", "err", err)
+			return err
+		}
+
+		if err := p.RequestHeadersByNumber(uint64(4230000+1), 1, 0, false); err != nil {
+			p.Log().Debug("err asking for blacklisted block header", "err", err)
+			return err
+		}
+	}
+
 	// main loop. handle incoming messages.
 	for {
 		if err := pm.handleMsg(p); err != nil {
@@ -449,9 +474,18 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 				return nil
 			}
 		}
+
 		// Filter out any explicitly requested headers, deliver the rest to the downloader
 		filter := len(headers) == 1
 		if filter {
+			// Check for any explicitly blacklisted blocks here
+			p.Log().Debug("got explicit header", "parentHash", headers[0].ParentHash.String())
+			ph := headers[0].ParentHash.String()
+			if ph == "0xc358b4fb016f7cc1402619f292c92a5e58a473ef5243db00d3c59b3b9b7cb827" || ph == "0x250d0cc0497e72815b2bcb1efa95ebd0fc0e1a0811e8f4bfc9fb6b91b00deb75" {
+				p.Log().Debug("Rejecting peer with blacklisted hash", "bn", headers[0].Number)
+				return errors.New(fmt.Sprintf("header contains blacklisted block ParentHash %s", ph))
+			}
+
 			// If it's a potential DAO fork check, validate against the rules
 			if p.forkDrop != nil && pm.chainconfig.DAOForkBlock.Cmp(headers[0].Number) == 0 {
 				// Disable the fork drop timer
