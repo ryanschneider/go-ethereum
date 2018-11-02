@@ -182,6 +182,10 @@ var (
 		Name:  "lightkdf",
 		Usage: "Reduce key-derivation RAM & CPU usage at some expense of KDF strength",
 	}
+	BlockHashWhitelistsFlag = cli.StringSliceFlag{
+		Name:  "blockhashwhitelist",
+		Usage: "Reject peers which send non-matching block hashes (<block number>=<hash>)",
+	}
 	// Dashboard settings
 	DashboardEnabledFlag = cli.BoolFlag{
 		Name:  metrics.DashboardEnabledFlag,
@@ -1204,6 +1208,15 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 
 	if ctx.GlobalIsSet(EVMInterpreterFlag.Name) {
 		cfg.EVMInterpreter = ctx.GlobalString(EVMInterpreterFlag.Name)
+	}
+
+	if ctx.GlobalIsSet(BlockHashWhitelistsFlag.Name) {
+		whitelistEntries := ctx.StringSlice(BlockHashWhitelistsFlag.Name)
+		whitelist, err := common.ParseBlockHashWhitelist(whitelistEntries)
+		if err != nil {
+			Fatalf("Option %s: %v", BlockHashWhitelistsFlag.Name, err)
+		}
+		cfg.BlockHashWhitelist = whitelist
 	}
 
 	// Override any default configs for hard coded networks.
