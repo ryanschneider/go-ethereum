@@ -18,8 +18,10 @@
 package les
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"net"
@@ -120,11 +122,13 @@ type ProtocolManager struct {
 	// wait group is used for graceful shutdowns during downloading
 	// and processing
 	wg *sync.WaitGroup
+
+	whitelist *common.BlockHashWhitelist
 }
 
 // NewProtocolManager returns a new ethereum sub protocol manager. The Ethereum sub protocol manages peers capable
 // with the ethereum network.
-func NewProtocolManager(chainConfig *params.ChainConfig, indexerConfig *light.IndexerConfig, lightSync bool, networkId uint64, mux *event.TypeMux, engine consensus.Engine, peers *peerSet, blockchain BlockChain, txpool txPool, chainDb ethdb.Database, odr *LesOdr, txrelay *LesTxRelay, serverPool *serverPool, quitSync chan struct{}, wg *sync.WaitGroup) (*ProtocolManager, error) {
+func NewProtocolManager(chainConfig *params.ChainConfig, indexerConfig *light.IndexerConfig, lightSync bool, networkId uint64, mux *event.TypeMux, engine consensus.Engine, peers *peerSet, blockchain BlockChain, txpool txPool, chainDb ethdb.Database, odr *LesOdr, txrelay *LesTxRelay, serverPool *serverPool, quitSync chan struct{}, wg *sync.WaitGroup, blockhashWhitelist *common.BlockHashWhitelist) (*ProtocolManager, error) {
 	// Create the protocol manager with the base fields
 	manager := &ProtocolManager{
 		lightSync:   lightSync,
@@ -143,6 +147,7 @@ func NewProtocolManager(chainConfig *params.ChainConfig, indexerConfig *light.In
 		quitSync:    quitSync,
 		wg:          wg,
 		noMorePeers: make(chan struct{}),
+		whitelist:   blockhashWhitelist,
 	}
 	if odr != nil {
 		manager.retriever = odr.retriever
@@ -314,6 +319,21 @@ func (pm *ProtocolManager) handle(p *peer) error {
 			}
 		}
 	}()
+
+	// If we have any explicit whitelist block hashes, request them
+	if whitelist := pm.whitelist; whitelist != nil {
+		for bn := range *whitelist {
+			p.Log().Debug("Requesting whitelist block", "number", bn)
+			pc := &peerConnection{
+				manager: pm,
+				peer:    p,
+			}
+			if err := pc.RequestHeadersByNumber(bn, 1, 0, false); err != nil {
+				p.Log().Error("whitelist request failed", "err", err, "number", bn, "peer", p.id)
+				return err
+			}
+		}
+	}
 
 	// main loop. handle incoming messages.
 	for {
@@ -508,12 +528,30 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
 		p.fcServer.GotReply(resp.ReqID, resp.BV)
+
 		if pm.fetcher != nil && pm.fetcher.requestedID(resp.ReqID) {
 			pm.fetcher.deliverHeaders(p, resp.ReqID, resp.Headers)
 		} else {
-			err := pm.downloader.DeliverHeaders(p.id, resp.Headers)
-			if err != nil {
-				log.Debug(fmt.Sprint(err))
+			filter := len(resp.Headers) == 1
+			if filter {
+				// Check for any responses not matching our whitelist
+				if whitelist := pm.whitelist; whitelist != nil {
+					header := resp.Headers[0]
+					if expected, ok := (*whitelist)[header.Number.Uint64()]; ok {
+						actual := header.Hash()
+						if !bytes.Equal(expected.Bytes(), actual.Bytes()) {
+							p.Log().Debug("dropping peer with non-matching whitelist block", "number", header.Number.Uint64(), "expected", expected, "actual", actual)
+							return errors.New("whitelist block mismatch")
+						}
+
+						p.Log().Debug("whitelist match", "number", header.Number.Uint64(), "expected", expected)
+					}
+				}
+			} else {
+				err := pm.downloader.DeliverHeaders(p.id, resp.Headers)
+				if err != nil {
+					log.Debug(fmt.Sprint(err))
+				}
 			}
 		}
 
