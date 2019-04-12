@@ -47,6 +47,15 @@ func (b *LesApiBackend) ChainConfig() *params.ChainConfig {
 	return b.eth.chainConfig
 }
 
+func (b *LesApiBackend) GenesisBlock() *core.Genesis {
+	g := b.eth.config.Genesis
+	if g != nil {
+		return g
+	}
+
+	return core.DefaultGenesisBlock()
+}
+
 func (b *LesApiBackend) CurrentBlock() *types.Block {
 	return types.NewBlockWithHeader(b.eth.BlockChain().CurrentHeader())
 }

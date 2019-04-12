@@ -47,6 +47,15 @@ func (b *EthAPIBackend) ChainConfig() *params.ChainConfig {
 	return b.eth.chainConfig
 }
 
+func (b *EthAPIBackend) GenesisBlock() *core.Genesis {
+	g := b.eth.config.Genesis
+	if g != nil {
+		return g
+	}
+
+	return core.DefaultGenesisBlock()
+}
+
 func (b *EthAPIBackend) CurrentBlock() *types.Block {
 	return b.eth.blockchain.CurrentBlock()
 }

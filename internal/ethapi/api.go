@@ -810,6 +810,10 @@ func (s *PublicBlockChainAPI) EstimateGas(ctx context.Context, args CallArgs) (h
 	return hexutil.Uint64(hi), nil
 }
 
+func (s *PublicBlockChainAPI) GenesisBlock(ctx context.Context) *core.Genesis {
+	return s.b.GenesisBlock()
+}
+
 // ExecutionResult groups all structured logs emitted by the EVM
 // while replaying a transaction in debug mode as well as transaction
 // execution status, the amount of gas used and the return value

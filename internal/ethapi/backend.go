@@ -70,6 +70,7 @@ type Backend interface {
 
 	ChainConfig() *params.ChainConfig
 	CurrentBlock() *types.Block
+	GenesisBlock() *core.Genesis
 }
 
 func GetAPIs(apiBackend Backend) []rpc.API {
