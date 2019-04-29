@@ -19,6 +19,7 @@ package graphql
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -112,7 +113,7 @@ func (l *Log) Account(ctx context.Context, args BlockNumberArgs) *Account {
 	return &Account{
 		backend:       l.backend,
 		address:       l.log.Address,
-		blockNrOrHash: args.NumberOrLatest(),
+		blockNrOrHash: args.NumberOr(*l.transaction.block.numberOrHash),
 	}
 }
 
@@ -215,7 +216,7 @@ func (t *Transaction) To(ctx context.Context, args BlockNumberArgs) (*Account, e
 	return &Account{
 		backend:       t.backend,
 		address:       *to,
-		blockNrOrHash: args.NumberOrLatest(),
+		blockNrOrHash: args.NumberOr(*t.block.numberOrHash),
 	}, nil
 }
 
@@ -234,7 +235,7 @@ func (t *Transaction) From(ctx context.Context, args BlockNumberArgs) (*Account,
 	return &Account{
 		backend:       t.backend,
 		address:       from,
-		blockNrOrHash: args.NumberOrLatest(),
+		blockNrOrHash: args.NumberOr(*t.block.numberOrHash),
 	}, nil
 }
 
@@ -313,7 +314,7 @@ func (t *Transaction) CreatedContract(ctx context.Context, args BlockNumberArgs)
 	return &Account{
 		backend:       t.backend,
 		address:       receipt.ContractAddress,
-		blockNrOrHash: args.NumberOrLatest(),
+		blockNrOrHash: args.NumberOr(*t.block.numberOrHash),
 	}, nil
 }
 
@@ -587,22 +588,70 @@ func (b *Block) TotalDifficulty(ctx context.Context) (hexutil.Big, error) {
 	return hexutil.Big(*b.backend.GetTd(h)), nil
 }
 
+type BlockIdentifierScalar struct {
+	nrOrHash *rpc.BlockNumberOrHash
+}
+
+func (_ BlockIdentifierScalar) ImplementsGraphQLType(name string) bool {
+	return name == "BlockIdentifier"
+}
+
+func (b *BlockIdentifierScalar) UnmarshalGraphQL(input interface{}) error {
+	parseInt := func(i int64) {
+		nr := rpc.BlockNumber(i)
+		nrOrHash := rpc.BlockNumberOrHash{
+			BlockNumber: &nr,
+		}
+		b.nrOrHash = &nrOrHash
+	}
+	switch input := input.(type) {
+	case string:
+		switch input {
+		case "current":
+			b.nrOrHash = nil
+			return nil
+		default:
+			nrOrHash := rpc.BlockNumberOrHash{}
+			_bytes, err := json.Marshal(input)
+			if err != nil {
+				return err
+			}
+			err = nrOrHash.UnmarshalJSON(_bytes)
+			if err != nil {
+				return err
+			}
+			b.nrOrHash = &nrOrHash
+			return nil
+		}
+	case int64:
+		parseInt(input)
+		return nil
+	case int32:
+		parseInt(int64(input))
+		return nil
+	case int:
+		parseInt(int64(input))
+		return nil
+	}
+
+	return fmt.Errorf("incompatible type")
+}
+
 // BlockNumberArgs encapsulates arguments to accessors that specify a block number.
 type BlockNumberArgs struct {
-	// TODO: Ideally we could use input unions to allow the query to specify the
-	// block parameter by hash, block number, or tag but input unions aren't part of the
-	// standard GraphQL schema SDL yet, see: https://github.com/graphql/graphql-spec/issues/488
-	Block *hexutil.Uint64
+	Block *BlockIdentifierScalar
 }
 
 // NumberOr returns the provided block number argument, or the "current" block number or hash if none
 // was provided.
 func (a BlockNumberArgs) NumberOr(current rpc.BlockNumberOrHash) rpc.BlockNumberOrHash {
-	if a.Block != nil {
-		blockNr := rpc.BlockNumber(*a.Block)
-		return rpc.BlockNumberOrHashWithNumber(blockNr)
+	if a.Block == nil {
+		return rpc.BlockNumberOrHashWithNumber(rpc.LatestBlockNumber)
 	}
-	return current
+	if a.Block.nrOrHash == nil {
+		return current
+	}
+	return *a.Block.nrOrHash
 }
 
 // NumberOrLatest returns the provided block number argument, or the "latest" block number if none
@@ -620,7 +669,7 @@ func (b *Block) Miner(ctx context.Context, args BlockNumberArgs) (*Account, erro
 	return &Account{
 		backend:       b.backend,
 		address:       block.Coinbase(),
-		blockNrOrHash: args.NumberOrLatest(),
+		blockNrOrHash: args.NumberOr(*b.numberOrHash),
 	}, nil
 }
 

@@ -30,6 +30,13 @@ const schema string = `
     scalar BigInt
     # Long is a 64 bit unsigned integer.
     scalar Long
+	# BlockIdentifier is a specifier for a block.  Can be one of:
+	# - A 64 bit integer or it's hexadecimal representation, in which case it is interpreted as a Block number
+	# - A Bytes32 in which case it is interpreted as a block hash
+	# - A string value of "latest" or "parent".  
+    #   - "latest" is the default and refers to the current chain head.  
+	#   - "current" refers to the block this argument is referenced in
+	scalar BlockIdentifier
 
     schema {
         query: Query
@@ -60,7 +67,7 @@ const schema string = `
         index: Int!
         # Account is the account which generated this log - this will always
         # be a contract account.
-        account(block: Long): Account!
+        account(block: BlockIdentifier): Account!
         # Topics is a list of 0-4 indexed topics for the log.
         topics: [Bytes32!]!
         # Data is unindexed data for this log.
@@ -80,10 +87,10 @@ const schema string = `
         index: Int
         # From is the account that sent this transaction - this will always be
         # an externally owned account.
-        from(block: Long): Account!
+        from(block: BlockIdentifier): Account!
         # To is the account the transaction was sent to. This is null for
         # contract-creating transactions.
-        to(block: Long): Account
+        to(block: BlockIdentifier): Account
         # Value is the value, in wei, sent along with this transaction.
         value: BigInt!
         # GasPrice is the price offered to miners for gas, in wei per unit.
@@ -111,7 +118,7 @@ const schema string = `
         # CreatedContract is the account that was created by a contract creation
         # transaction. If the transaction was not a contract creation transaction,
         # or it has not yet been mined, this field will be null.
-        createdContract(block: Long): Account
+        createdContract(block: BlockIdentifier): Account
         # Logs is a list of log entries emitted by this transaction. If the
         # transaction has not yet been mined, this field will be null.
         logs: [Log!]
@@ -157,7 +164,7 @@ const schema string = `
         # ReceiptsRoot is the keccak256 hash of the trie of transaction receipts in this block.
         receiptsRoot: Bytes32!
         # Miner is the account that mined this block.
-        miner(block: Long): Account!
+        miner(block: BlockIdentifier): Account!
         # ExtraData is an arbitrary data field supplied by the miner.
         extraData: Bytes!
         # GasLimit is the maximum amount of gas that was available to transactions in this block.
