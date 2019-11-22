@@ -290,7 +290,13 @@ func (b *EthAPIBackend) ExtRPCEnabled() bool {
 }
 
 func (b *EthAPIBackend) RPCGasCap() *big.Int {
-	return b.eth.config.RPCGasCap
+	if b.eth.config.RPCGasCap != nil {
+		return b.eth.config.RPCGasCap
+	}
+	if header := b.eth.blockchain.CurrentHeader(); header != nil {
+		return new(big.Int).SetUint64(header.GasLimit * 10)
+	}
+	return nil
 }
 
 func (b *EthAPIBackend) BloomStatus() (uint64, uint64) {
