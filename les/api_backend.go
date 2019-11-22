@@ -259,7 +259,13 @@ func (b *LesApiBackend) ExtRPCEnabled() bool {
 }
 
 func (b *LesApiBackend) RPCGasCap() uint64 {
-	return b.eth.config.RPCGasCap
+	if b.eth.config.RPCGasCap != 0 {
+		return b.eth.config.RPCGasCap
+	}
+	if header := b.eth.blockchain.CurrentHeader(); header != nil {
+		return header.GasLimit * 10
+	}
+	return 0
 }
 
 func (b *LesApiBackend) RPCTxFeeCap() float64 {
