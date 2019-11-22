@@ -805,12 +805,17 @@ func DoCall(ctx context.Context, b Backend, args CallArgs, blockNrOrHash rpc.Blo
 	}
 	// Set default gas & gas price if none were set
 	gas := uint64(math.MaxUint64 / 2)
-	if args.Gas != nil {
-		gas = uint64(*args.Gas)
-	}
 	if globalGasCap != nil && globalGasCap.Uint64() < gas {
-		log.Warn("Caller gas above allowance, capping", "requested", gas, "cap", globalGasCap)
 		gas = globalGasCap.Uint64()
+	}
+
+	if args.Gas != nil {
+		requested := uint64(*args.Gas)
+		if requested < gas {
+			gas = requested
+		} else {
+			log.Debug("Caller gas above allowance, capping", "requested", requested, "cap", gas)
+		}
 	}
 	gasPrice := new(big.Int).SetUint64(defaultGasPrice)
 	if args.GasPrice != nil {
@@ -901,7 +906,7 @@ func DoEstimateGas(ctx context.Context, b Backend, args CallArgs, blockNrOrHash 
 		hi = block.GasLimit()
 	}
 	if gasCap != nil && hi > gasCap.Uint64() {
-		log.Warn("Caller gas above allowance, capping", "requested", hi, "cap", gasCap)
+		log.Debug("Caller gas above allowance, capping", "requested", hi, "cap", gasCap)
 		hi = gasCap.Uint64()
 	}
 	cap = hi
