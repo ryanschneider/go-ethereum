@@ -759,6 +759,10 @@ func (fb *filterBackend) GetLogs(_ context.Context, hash common.Hash) ([][]*type
 	return logs, nil
 }
 
+func (fb *filterBackend) GetPoolTransaction(hash common.Hash) *types.Transaction {
+	return nil
+}
+
 func (fb *filterBackend) SubscribeNewTxsEvent(_ chan<- core.NewTxsEvent) event.Subscription {
 	return nullSubscription()
 }
