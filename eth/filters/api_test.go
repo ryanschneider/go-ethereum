@@ -17,8 +17,10 @@
 package filters
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -181,5 +183,88 @@ func TestUnmarshalJSONNewFilterArgs(t *testing.T) {
 	}
 	if len(test7.Topics[2]) != 0 {
 		t.Fatalf("expected 0 topics, got %d topics", len(test7.Topics[2]))
+	}
+}
+
+func TestFilterCriteria_MarshalJSON(t *testing.T) {
+	var (
+		block0   = common.HexToHash("1111111111111111111111111111111111111111111111111111111111111111")
+		address0 = common.HexToAddress("70c87d191324e6712a591f304b4eedef6ad9bb9d")
+		address1 = common.HexToAddress("9b2055d370f73ec7d8a03e965129118dc8f5bf83")
+		topic0   = common.HexToHash("3ac225168df54212a25c1c01fd35bebfea408fdac2e31ddd6f80a4bbf9a5f1ca")
+		topic1   = common.HexToHash("9084a792d2f8b16a62b882fd56f7860c07bf5fa91dd8a2ae7e809e5180fef0b3")
+		topic2   = common.HexToHash("6ccae1c4af4152f460ff510e573399795dfab5dcf1fa60d1f33ac8fdc1e480ce")
+	)
+
+	test0 := FilterCriteria{
+		BlockHash: nil,
+		FromBlock: nil,
+		ToBlock:   nil,
+		Addresses: nil,
+		Topics:    nil,
+	}
+
+	if b, err := json.Marshal(&test0); err != nil {
+		t.Fatal(err)
+	} else {
+		if string(b) != `{}` {
+			t.Fatalf("expected {}")
+		}
+	}
+
+	test1 := FilterCriteria{
+		BlockHash: &block0,
+	}
+
+	if b, err := json.Marshal(&test1); err != nil {
+		t.Fatal(err)
+	} else {
+		if string(b) != fmt.Sprintf(`{"blockHash":"%s"}`, block0.Hex()) {
+			t.Fatalf("expected {blockHash:...}")
+		}
+	}
+
+	test2 := FilterCriteria{
+		FromBlock: big.NewInt(-1),
+	}
+
+	if b, err := json.Marshal(&test2); err != nil {
+		t.Fatal(err)
+	} else {
+		if string(b) != `{"fromBlock":"latest"}` {
+			t.Fatalf("expected {fromBlock:...}")
+		}
+	}
+
+	test3 := FilterCriteria{
+		Topics: [][]common.Hash{
+			{topic0},
+			nil,
+			{topic1, topic2},
+		},
+	}
+
+	if b, err := json.Marshal(&test3); err != nil {
+		t.Fatal(err)
+	} else {
+		if string(b) != fmt.Sprintf(`{"topics":[["%s"],null,["%s","%s"]]}`, topic0.Hex(), topic1.Hex(), topic2.Hex()) {
+			t.Fatalf("expected {topics:...} got %s", string(b))
+		}
+	}
+
+	test4 := FilterCriteria{
+		Addresses: []common.Address{
+			address0, address1,
+		},
+	}
+
+	if b, err := json.Marshal(&test4); err != nil {
+		t.Fatal(err)
+	} else {
+		// don't use address0.Hex() since that returns a mixed-case EIP55 string
+		expected := fmt.Sprintf(`{"address":["0x%s","0x%s"]}`, hex.EncodeToString(address0.Bytes()), hex.EncodeToString(address1.Bytes()))
+		if string(b) != expected {
+			t.Fatalf("expected %s got %s", expected, string(b))
+		}
 	}
 }
