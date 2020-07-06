@@ -477,6 +477,22 @@ func (api *PublicFilterAPI) GetFilterChanges(id rpc.ID) (interface{}, error) {
 	return []interface{}{}, fmt.Errorf("filter not found")
 }
 
+func (api *PublicFilterAPI) GetFilterParams(id rpc.ID) (*FilterCriteria, error) {
+	api.filtersMu.Lock()
+	defer api.filtersMu.Unlock()
+
+	if f, found := api.filters[id]; found {
+		switch f.typ {
+		case LogsSubscription:
+			return &f.crit, nil
+		default:
+			return nil, fmt.Errorf("filter is not a log filter")
+		}
+	}
+
+	return nil, fmt.Errorf("filter not found")
+}
+
 // returnHashes is a helper that will return an empty hash array case the given hash array is nil,
 // otherwise the given hashes array is returned.
 func returnHashes(hashes []common.Hash) []common.Hash {
@@ -596,6 +612,43 @@ func (args *FilterCriteria) UnmarshalJSON(data []byte) error {
 	}
 
 	return nil
+}
+
+func (args *FilterCriteria) MarshalJSON() ([]byte, error) {
+	type output struct {
+		BlockHash *common.Hash     `json:"blockHash,omitempty"`
+		FromBlock interface{}      `json:"fromBlock,omitempty"`
+		ToBlock   interface{}      `json:"toBlock,omitempty"`
+		Addresses []common.Address `json:"address,omitempty"`
+		Topics    [][]common.Hash  `json:"topics,omitempty"`
+	}
+
+	toBlockNumber := func(i *big.Int) interface{} {
+		if i == nil {
+			return nil
+		}
+
+		bn := rpc.BlockNumber(i.Int64())
+		switch bn {
+		case rpc.PendingBlockNumber:
+			return "pending"
+		case rpc.EarliestBlockNumber:
+			return "earliest"
+		case rpc.LatestBlockNumber:
+			return "latest"
+		}
+		return hexutil.EncodeBig(i)
+	}
+
+	enc := output{
+		BlockHash: args.BlockHash,
+		FromBlock: toBlockNumber(args.FromBlock),
+		ToBlock:   toBlockNumber(args.ToBlock),
+		Addresses: args.Addresses,
+		Topics:    args.Topics,
+	}
+
+	return json.Marshal(&enc)
 }
 
 func decodeAddress(s string) (common.Address, error) {
