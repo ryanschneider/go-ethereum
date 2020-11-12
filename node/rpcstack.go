@@ -171,25 +171,15 @@ func (h *httpServer) start() error {
 
 func (h *httpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	rpc := h.httpHandler.Load().(*rpcHandler)
-	if r.RequestURI == "/" {
-		// Serve JSON-RPC on the root path.
-		ws := h.wsHandler.Load().(*rpcHandler)
-		if ws != nil && isWebsocket(r) {
-			ws.ServeHTTP(w, r)
-			return
-		}
-		if rpc != nil {
-			rpc.ServeHTTP(w, r)
-			return
-		}
-	} else if rpc != nil {
-		// Requests to a path below root are handled by the mux,
-		// which has all the handlers registered via Node.RegisterHandler.
-		// These are made available when RPC is enabled.
-		h.mux.ServeHTTP(w, r)
+	ws := h.wsHandler.Load().(*rpcHandler)
+	if ws != nil && isWebsocket(r) {
+		ws.ServeHTTP(w, r)
 		return
 	}
-	w.WriteHeader(404)
+	if rpc != nil {
+		rpc.ServeHTTP(w, r)
+		return
+	}
 }
 
 // stop shuts down the HTTP server.
