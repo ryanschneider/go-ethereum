@@ -1,0 +1,59 @@
+name: build artifacts on every new commit
+on:
+  push:
+    branches:
+      - '!main'
+      - '**omnibus**'
+    paths-ignore:
+      - '.github/**'
+      - 'patches/**'
+      - README.md
+      - Makefile
+      - update-patch.go
+      - .gitignore
+
+jobs:
+  test:
+    name: Run tests
+    runs-on: ubuntu-18.04
+    env:
+      GOPRIVATE: github.com/INFURA
+    steps:
+
+    - name: Set up Go 1.x
+      uses: actions/setup-go@v1
+      with:
+        go-version: 1.16
+      id: go
+
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v1
+
+    - name: run tests
+      run: |
+        go test ./eth ./rpc ./core ./internal/ethapi
+  build:
+    name: Build Artifacts
+    runs-on: ubuntu-18.04
+    env:
+      GOPRIVATE: github.com/INFURA
+    steps:
+
+    - name: Set up Go 1.x
+      uses: actions/setup-go@v1
+      with:
+        go-version: 1.16
+      id: go
+
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v1
+
+    - name: build artifacts
+      run: |
+        make geth && cp ./build/bin/geth geth-linux-amd64 && ./geth-linux-amd64 --help && ./geth-linux-amd64 version
+
+    - name: upload artifacts
+      uses: actions/upload-artifact@v1
+      with:
+        name: geth-linux-amd64
+        path: ./geth-linux-amd64
