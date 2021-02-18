@@ -1422,18 +1422,10 @@ func (s *PublicTransactionPoolAPI) GetTransactionReceipt(ctx context.Context, ha
 	}
 	receipt := receipts[index]
 
-	txType := tx.Type()
 	var signer types.Signer = types.FrontierSigner{}
 	if tx.Protected() {
-		switch txType {
-		case types.LegacyTxType:
-			signer = types.NewEIP155Signer(tx.ChainId())
-		case types.AccessListTxType:
-			// EIP-2930
-			signer = types.NewEIP2718Signer(tx.ChainId())
-		}
+		signer = types.MakeSigner(s.b.ChainConfig(), receipt.BlockNumber)
 	}
-
 	from, _ := types.Sender(signer, tx)
 
 	fields := map[string]interface{}{
@@ -1464,7 +1456,7 @@ func (s *PublicTransactionPoolAPI) GetTransactionReceipt(ctx context.Context, ha
 		fields["contractAddress"] = receipt.ContractAddress
 	}
 
-	if txType != types.LegacyTxType {
+	if txType := tx.Type(); txType != types.LegacyTxType {
 		fields["type"] = hexutil.Uint(txType)
 	}
 	return fields, nil
