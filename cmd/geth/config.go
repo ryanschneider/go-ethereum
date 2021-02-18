@@ -114,6 +114,8 @@ func defaultNodeConfig() node.Config {
 	cfg.HTTPModules = append(cfg.HTTPModules, "eth")
 	cfg.WSModules = append(cfg.WSModules, "eth")
 	cfg.IPCPath = "geth.ipc"
+	cfg.HTTPPathPrefix = "/"
+	cfg.WSPathPrefix = "/"
 	return cfg
 }
 
