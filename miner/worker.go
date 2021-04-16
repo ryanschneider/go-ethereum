@@ -653,6 +653,12 @@ func (w *worker) makeCurrent(parent *types.Block, header *types.Header) error {
 	}
 	state.StartPrefetcher("miner")
 
+	if w.chainConfig.IsAleut(parent.Number()) {
+		header.BaseFee = misc.CalcBaseFee(parent.Header())
+	} else if w.chainConfig.IsAleut(header.Number) {
+		header.BaseFee = new(big.Int).SetUint64(params.InitialBaseFee)
+	}
+
 	env := &environment{
 		signer:    types.MakeSigner(w.chainConfig, header.Number),
 		state:     state,
