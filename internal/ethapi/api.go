@@ -1276,9 +1276,14 @@ func newRPCTransaction(tx *types.Transaction, blockHash common.Hash, blockNumber
 		result.ChainID = (*hexutil.Big)(tx.ChainId())
 		result.FeeCap = (*hexutil.Big)(tx.FeeCap())
 		result.Tip = (*hexutil.Big)(tx.Tip())
-		// price = min(tip, feeCap - baseFee) + baseFee
-		price := math.BigMin(new(big.Int).Add(tx.Tip(), baseFee), tx.FeeCap())
-		result.GasPrice = (*hexutil.Big)(price)
+		// if the transaction has been mined, compute the effective gas price
+		if baseFee != nil && blockHash != (common.Hash{}) {
+			// price = min(tip, feeCap - baseFee) + baseFee
+			price := math.BigMin(new(big.Int).Add(tx.Tip(), baseFee), tx.FeeCap())
+			result.GasPrice = (*hexutil.Big)(price)
+		} else {
+			result.GasPrice = nil
+		}
 	}
 	return result
 }
