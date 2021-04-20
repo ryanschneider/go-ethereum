@@ -32,12 +32,14 @@ import (
 const sampleNumber = 3 // Number of transactions sampled in a block
 
 var DefaultMaxPrice = big.NewInt(500 * params.GWei)
+var DefaultIgnorePrice = big.NewInt(10 * params.GWei)
 
 type Config struct {
-	Blocks     int
-	Percentile int
-	Default    *big.Int `toml:",omitempty"`
-	MaxPrice   *big.Int `toml:",omitempty"`
+	Blocks      int
+	Percentile  int
+	Default     *big.Int `toml:",omitempty"`
+	MaxPrice    *big.Int `toml:",omitempty"`
+	IgnorePrice *big.Int `toml:",omitempty"`
 }
 
 // OracleBackend includes all necessary background APIs for oracle.
@@ -51,12 +53,13 @@ type OracleBackend interface {
 // Oracle recommends gas prices based on the content of recent
 // blocks. Suitable for both light and full clients.
 type Oracle struct {
-	backend   OracleBackend
-	lastHead  common.Hash
-	lastPrice *big.Int
-	maxPrice  *big.Int
-	cacheLock sync.RWMutex
-	fetchLock sync.Mutex
+	backend     OracleBackend
+	lastHead    common.Hash
+	lastPrice   *big.Int
+	maxPrice    *big.Int
+	ignorePrice *big.Int
+	cacheLock   sync.RWMutex
+	fetchLock   sync.Mutex
 
 	checkBlocks int
 	percentile  int
@@ -84,10 +87,16 @@ func NewOracle(backend OracleBackend, params Config) *Oracle {
 		maxPrice = DefaultMaxPrice
 		log.Warn("Sanitizing invalid gasprice oracle price cap", "provided", params.MaxPrice, "updated", maxPrice)
 	}
+	ignorePrice := params.IgnorePrice
+	if ignorePrice == nil || ignorePrice.Int64() <= 0 {
+		ignorePrice = DefaultIgnorePrice
+		log.Warn("Sanitizing invalid gasprice oracle ignore price", "provided", params.IgnorePrice, "updated", ignorePrice)
+	}
 	return &Oracle{
 		backend:     backend,
 		lastPrice:   params.Default,
 		maxPrice:    maxPrice,
+		ignorePrice: ignorePrice,
 		checkBlocks: blocks,
 		percentile:  percent,
 	}
@@ -170,7 +179,10 @@ func (gpo *Oracle) SuggestPrice(ctx context.Context) (*big.Int, error) {
 }
 
 func (gpo *Oracle) SuggestedPrice(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) (*big.Int, error) {
-	head, _ := gpo.backend.HeaderByNumberOrHash(ctx, blockNrOrHash)
+	head, err := gpo.backend.HeaderByNumberOrHash(ctx, blockNrOrHash)
+	if err != nil {
+		return nil, err
+	}
 	price := new(big.Int)
 
 	var (
@@ -252,6 +264,10 @@ func (gpo *Oracle) getBlockPrices(ctx context.Context, signer types.Signer, bloc
 
 	var prices []*big.Int
 	for _, tx := range txs {
+		if gpo.ignorePrice != nil && tx.GasPrice().Cmp(gpo.ignorePrice) == -1 {
+			log.Trace("ignoring underpriced tx", tx, tx.Hash(), "price", tx.GasPrice())
+			continue
+		}
 		sender, err := types.Sender(signer, tx)
 		if err == nil && sender != block.Coinbase() {
 			prices = append(prices, tx.GasPrice())
