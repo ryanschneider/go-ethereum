@@ -43,6 +43,7 @@ type Config struct {
 // OracleBackend includes all necessary background APIs for oracle.
 type OracleBackend interface {
 	HeaderByNumber(ctx context.Context, number rpc.BlockNumber) (*types.Header, error)
+	HeaderByNumberOrHash(ctx context.Context, number rpc.BlockNumberOrHash) (*types.Header, error)
 	BlockByNumber(ctx context.Context, number rpc.BlockNumber) (*types.Block, error)
 	ChainConfig() *params.ChainConfig
 }
@@ -95,7 +96,11 @@ func NewOracle(backend OracleBackend, params Config) *Oracle {
 // SuggestPrice returns a gasprice so that newly created transaction can
 // have a very high chance to be included in the following blocks.
 func (gpo *Oracle) SuggestPrice(ctx context.Context) (*big.Int, error) {
-	head, _ := gpo.backend.HeaderByNumber(ctx, rpc.LatestBlockNumber)
+	return gpo.SuggestedPrice(ctx, rpc.BlockNumberOrHashWithNumber(rpc.LatestBlockNumber))
+}
+
+func (gpo *Oracle) SuggestedPrice(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) (*big.Int, error) {
+	head, _ := gpo.backend.HeaderByNumberOrHash(ctx, blockNrOrHash)
 	headHash := head.Hash()
 
 	// If the latest gasprice is still available, return it.

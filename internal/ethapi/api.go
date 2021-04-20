@@ -65,6 +65,12 @@ func (s *PublicEthereumAPI) GasPrice(ctx context.Context) (*hexutil.Big, error) 
 	return (*hexutil.Big)(price), err
 }
 
+// GasPrice returns a suggestion for a gas price.
+func (s *PublicEthereumAPI) HistoricalGasPrice(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) (*hexutil.Big, error) {
+	price, err := s.b.SuggestedPrice(ctx, blockNrOrHash)
+	return (*hexutil.Big)(price), err
+}
+
 // Syncing returns false in case the node is currently not syncing with the network. It can be up to date or has not
 // yet received the latest block headers from its pears. In case it is synchronizing:
 // - startingBlock: block number this node started to synchronise from
