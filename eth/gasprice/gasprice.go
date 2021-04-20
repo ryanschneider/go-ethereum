@@ -43,6 +43,7 @@ type Config struct {
 // OracleBackend includes all necessary background APIs for oracle.
 type OracleBackend interface {
 	HeaderByNumber(ctx context.Context, number rpc.BlockNumber) (*types.Header, error)
+	HeaderByNumberOrHash(ctx context.Context, number rpc.BlockNumberOrHash) (*types.Header, error)
 	BlockByNumber(ctx context.Context, number rpc.BlockNumber) (*types.Block, error)
 	ChainConfig() *params.ChainConfig
 }
@@ -165,6 +166,58 @@ func (gpo *Oracle) SuggestPrice(ctx context.Context) (*big.Int, error) {
 	gpo.lastHead = headHash
 	gpo.lastPrice = price
 	gpo.cacheLock.Unlock()
+	return price, nil
+}
+
+func (gpo *Oracle) SuggestedPrice(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) (*big.Int, error) {
+	head, _ := gpo.backend.HeaderByNumberOrHash(ctx, blockNrOrHash)
+	price := new(big.Int)
+
+	var (
+		sent, exp int
+		number    = head.Number.Uint64()
+		result    = make(chan getBlockPricesResult, gpo.checkBlocks)
+		quit      = make(chan struct{})
+		txPrices  []*big.Int
+	)
+	for sent < gpo.checkBlocks && number > 0 {
+		go gpo.getBlockPrices(ctx, types.MakeSigner(gpo.backend.ChainConfig(), big.NewInt(int64(number))), number, sampleNumber, result, quit)
+		sent++
+		exp++
+		number--
+	}
+	for exp > 0 {
+		res := <-result
+		if res.err != nil {
+			close(quit)
+			return price, res.err
+		}
+		exp--
+		// Nothing returned. There are two special cases here:
+		// - The block is empty
+		// - All the transactions included are sent by the miner itself.
+		// In these cases, use the latest calculated price for samping.
+		if len(res.prices) == 0 {
+			res.prices = []*big.Int{price}
+		}
+		// Besides, in order to collect enough data for sampling, if nothing
+		// meaningful returned, try to query more blocks. But the maximum
+		// is 2*checkBlocks.
+		if len(res.prices) == 1 && len(txPrices)+1+exp < gpo.checkBlocks*2 && number > 0 {
+			go gpo.getBlockPrices(ctx, types.MakeSigner(gpo.backend.ChainConfig(), big.NewInt(int64(number))), number, sampleNumber, result, quit)
+			sent++
+			exp++
+			number--
+		}
+		txPrices = append(txPrices, res.prices...)
+	}
+	if len(txPrices) > 0 {
+		sort.Sort(bigIntArray(txPrices))
+		price = txPrices[(len(txPrices)-1)*gpo.percentile/100]
+	}
+	if price.Cmp(gpo.maxPrice) > 0 {
+		price = new(big.Int).Set(gpo.maxPrice)
+	}
 	return price, nil
 }
 
