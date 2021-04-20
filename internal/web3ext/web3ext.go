@@ -584,8 +584,8 @@ web3._extend({
 		new web3._extend.Method({
 			name: 'historicalGasPrice',
 			call: 'eth_historicalGasPrice',
-			params: 1,
-			inputFormatter: [web3._extend.formatters.inputBlockNumberFormatter]
+			params: 2,
+			inputFormatter: [web3._extend.utils.toHex, web3._extend.formatters.inputBlockNumberFormatter]
 		}),
 	],
 	properties: [

@@ -279,8 +279,8 @@ func (b *EthAPIBackend) SuggestPrice(ctx context.Context) (*big.Int, error) {
 	return b.gpo.SuggestPrice(ctx)
 }
 
-func (b *EthAPIBackend) SuggestedPrice(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) (*big.Int, error) {
-	return b.gpo.SuggestedPrice(ctx, blockNrOrHash)
+func (b *EthAPIBackend) SuggestedPrice(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, ignorePrice *big.Int) (*big.Int, error) {
+	return b.gpo.SuggestedPrice(ctx, blockNrOrHash, ignorePrice)
 }
 
 func (b *EthAPIBackend) ChainDb() ethdb.Database {

@@ -125,51 +125,10 @@ func (gpo *Oracle) SuggestPrice(ctx context.Context) (*big.Int, error) {
 	if headHash == lastHead {
 		return lastPrice, nil
 	}
-	var (
-		sent, exp int
-		number    = head.Number.Uint64()
-		result    = make(chan getBlockPricesResult, gpo.checkBlocks)
-		quit      = make(chan struct{})
-		txPrices  []*big.Int
-	)
-	for sent < gpo.checkBlocks && number > 0 {
-		go gpo.getBlockPrices(ctx, types.MakeSigner(gpo.backend.ChainConfig(), big.NewInt(int64(number))), number, sampleNumber, result, quit)
-		sent++
-		exp++
-		number--
-	}
-	for exp > 0 {
-		res := <-result
-		if res.err != nil {
-			close(quit)
-			return lastPrice, res.err
-		}
-		exp--
-		// Nothing returned. There are two special cases here:
-		// - The block is empty
-		// - All the transactions included are sent by the miner itself.
-		// In these cases, use the latest calculated price for samping.
-		if len(res.prices) == 0 {
-			res.prices = []*big.Int{lastPrice}
-		}
-		// Besides, in order to collect enough data for sampling, if nothing
-		// meaningful returned, try to query more blocks. But the maximum
-		// is 2*checkBlocks.
-		if len(res.prices) == 1 && len(txPrices)+1+exp < gpo.checkBlocks*2 && number > 0 {
-			go gpo.getBlockPrices(ctx, types.MakeSigner(gpo.backend.ChainConfig(), big.NewInt(int64(number))), number, sampleNumber, result, quit)
-			sent++
-			exp++
-			number--
-		}
-		txPrices = append(txPrices, res.prices...)
-	}
-	price := lastPrice
-	if len(txPrices) > 0 {
-		sort.Sort(bigIntArray(txPrices))
-		price = txPrices[(len(txPrices)-1)*gpo.percentile/100]
-	}
-	if price.Cmp(gpo.maxPrice) > 0 {
-		price = new(big.Int).Set(gpo.maxPrice)
+
+	price, err := gpo.suggestedPrice(ctx, head, lastPrice, gpo.ignorePrice)
+	if err != nil {
+		return lastPrice, err
 	}
 	gpo.cacheLock.Lock()
 	gpo.lastHead = headHash
@@ -178,59 +137,12 @@ func (gpo *Oracle) SuggestPrice(ctx context.Context) (*big.Int, error) {
 	return price, nil
 }
 
-func (gpo *Oracle) SuggestedPrice(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) (*big.Int, error) {
+func (gpo *Oracle) SuggestedPrice(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, ignorePrice *big.Int) (*big.Int, error) {
 	head, err := gpo.backend.HeaderByNumberOrHash(ctx, blockNrOrHash)
 	if err != nil {
 		return nil, err
 	}
-	price := new(big.Int)
-
-	var (
-		sent, exp int
-		number    = head.Number.Uint64()
-		result    = make(chan getBlockPricesResult, gpo.checkBlocks)
-		quit      = make(chan struct{})
-		txPrices  []*big.Int
-	)
-	for sent < gpo.checkBlocks && number > 0 {
-		go gpo.getBlockPrices(ctx, types.MakeSigner(gpo.backend.ChainConfig(), big.NewInt(int64(number))), number, sampleNumber, result, quit)
-		sent++
-		exp++
-		number--
-	}
-	for exp > 0 {
-		res := <-result
-		if res.err != nil {
-			close(quit)
-			return price, res.err
-		}
-		exp--
-		// Nothing returned. There are two special cases here:
-		// - The block is empty
-		// - All the transactions included are sent by the miner itself.
-		// In these cases, use the latest calculated price for samping.
-		if len(res.prices) == 0 {
-			res.prices = []*big.Int{price}
-		}
-		// Besides, in order to collect enough data for sampling, if nothing
-		// meaningful returned, try to query more blocks. But the maximum
-		// is 2*checkBlocks.
-		if len(res.prices) == 1 && len(txPrices)+1+exp < gpo.checkBlocks*2 && number > 0 {
-			go gpo.getBlockPrices(ctx, types.MakeSigner(gpo.backend.ChainConfig(), big.NewInt(int64(number))), number, sampleNumber, result, quit)
-			sent++
-			exp++
-			number--
-		}
-		txPrices = append(txPrices, res.prices...)
-	}
-	if len(txPrices) > 0 {
-		sort.Sort(bigIntArray(txPrices))
-		price = txPrices[(len(txPrices)-1)*gpo.percentile/100]
-	}
-	if price.Cmp(gpo.maxPrice) > 0 {
-		price = new(big.Int).Set(gpo.maxPrice)
-	}
-	return price, nil
+	return gpo.suggestedPrice(ctx, head, new(big.Int), ignorePrice)
 }
 
 type getBlockPricesResult struct {
@@ -248,7 +160,7 @@ func (t transactionsByGasPrice) Less(i, j int) bool { return t[i].GasPriceCmp(t[
 // and sends it to the result channel. If the block is empty or all transactions
 // are sent by the miner itself(it doesn't make any sense to include this kind of
 // transaction prices for sampling), nil gasprice is returned.
-func (gpo *Oracle) getBlockPrices(ctx context.Context, signer types.Signer, blockNum uint64, limit int, result chan getBlockPricesResult, quit chan struct{}) {
+func (gpo *Oracle) getBlockPrices(ctx context.Context, signer types.Signer, blockNum uint64, limit int, ignoreUnder *big.Int, result chan getBlockPricesResult, quit chan struct{}) {
 	block, err := gpo.backend.BlockByNumber(ctx, rpc.BlockNumber(blockNum))
 	if block == nil {
 		select {
@@ -264,7 +176,7 @@ func (gpo *Oracle) getBlockPrices(ctx context.Context, signer types.Signer, bloc
 
 	var prices []*big.Int
 	for _, tx := range txs {
-		if gpo.ignorePrice != nil && tx.GasPrice().Cmp(gpo.ignorePrice) == -1 {
+		if ignoreUnder != nil && tx.GasPrice().Cmp(ignoreUnder) == -1 {
 			log.Trace("ignoring underpriced tx", tx, tx.Hash(), "price", tx.GasPrice())
 			continue
 		}
@@ -280,6 +192,56 @@ func (gpo *Oracle) getBlockPrices(ctx context.Context, signer types.Signer, bloc
 	case result <- getBlockPricesResult{prices, nil}:
 	case <-quit:
 	}
+}
+
+func (gpo *Oracle) suggestedPrice(ctx context.Context, head *types.Header, lastPrice *big.Int, ignorePrice *big.Int) (*big.Int, error) {
+	var (
+		sent, exp int
+		number    = head.Number.Uint64()
+		result    = make(chan getBlockPricesResult, gpo.checkBlocks)
+		quit      = make(chan struct{})
+		txPrices  []*big.Int
+		price     = new(big.Int)
+	)
+	for sent < gpo.checkBlocks && number > 0 {
+		go gpo.getBlockPrices(ctx, types.MakeSigner(gpo.backend.ChainConfig(), big.NewInt(int64(number))), number, sampleNumber, ignorePrice, result, quit)
+		sent++
+		exp++
+		number--
+	}
+	for exp > 0 {
+		res := <-result
+		if res.err != nil {
+			close(quit)
+			return lastPrice, res.err
+		}
+		exp--
+		// Nothing returned. There are two special cases here:
+		// - The block is empty
+		// - All the transactions included are sent by the miner itself.
+		// In these cases, use the latest calculated price for sampling.
+		if len(res.prices) == 0 {
+			res.prices = []*big.Int{lastPrice}
+		}
+		// Besides, in order to collect enough data for sampling, if nothing
+		// meaningful returned, try to query more blocks. But the maximum
+		// is 2*checkBlocks.
+		if len(res.prices) == 1 && len(txPrices)+1+exp < gpo.checkBlocks*2 && number > 0 {
+			go gpo.getBlockPrices(ctx, types.MakeSigner(gpo.backend.ChainConfig(), big.NewInt(int64(number))), number, sampleNumber, ignorePrice, result, quit)
+			sent++
+			exp++
+			number--
+		}
+		txPrices = append(txPrices, res.prices...)
+	}
+	if len(txPrices) > 0 {
+		sort.Sort(bigIntArray(txPrices))
+		price = txPrices[(len(txPrices)-1)*gpo.percentile/100]
+	}
+	if price.Cmp(gpo.maxPrice) > 0 {
+		price = new(big.Int).Set(gpo.maxPrice)
+	}
+	return price, nil
 }
 
 type bigIntArray []*big.Int
