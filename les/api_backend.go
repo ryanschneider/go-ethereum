@@ -255,6 +255,10 @@ func (b *LesApiBackend) SuggestPrice(ctx context.Context) (*big.Int, error) {
 	return b.gpo.SuggestPrice(ctx)
 }
 
+func (b *LesApiBackend) SuggestedPrice(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, ignorePrice *big.Int) (*big.Int, error) {
+	return nil, errors.New("not implemented")
+}
+
 func (b *LesApiBackend) ChainDb() ethdb.Database {
 	return b.eth.chainDb
 }
