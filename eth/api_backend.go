@@ -313,7 +313,13 @@ func (b *EthAPIBackend) UnprotectedAllowed() bool {
 }
 
 func (b *EthAPIBackend) RPCGasCap() uint64 {
+	if b.eth.config.RPCGasCap != 0 {
 	return b.eth.config.RPCGasCap
+}
+	if header := b.eth.blockchain.CurrentHeader(); header != nil {
+		return header.GasLimit * 10
+	}
+	return 0
 }
 
 func (b *EthAPIBackend) RPCTxFeeCap() float64 {
