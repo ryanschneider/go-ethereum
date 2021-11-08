@@ -91,7 +91,7 @@ var Defaults = Config{
 	RPCGasCap:     0,
 	RPCEVMTimeout: 5 * time.Second,
 	GPO:           FullNodeGPO,
-	RPCTxFeeCap:   1, // 1 ether
+	RPCTxFeeCap: 0, // no fee cap
 }
 
 func init() {
