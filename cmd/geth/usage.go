@@ -96,6 +96,7 @@ var AppHelpFlagGroups = []flags.FlagGroup{
 		Flags: []cli.Flag{
 			utils.TxPoolLocalsFlag,
 			utils.TxPoolNoLocalsFlag,
+			utils.TxPoolNoRemotesFlag,
 			utils.TxPoolJournalFlag,
 			utils.TxPoolRejournalFlag,
 			utils.TxPoolPriceLimitFlag,
