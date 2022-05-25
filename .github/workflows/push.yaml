@@ -52,6 +52,9 @@ jobs:
     - name: build artifacts
       run: |
         make geth && cp ./build/bin/geth geth-linux-amd64 && ./geth-linux-amd64 --help && ./geth-linux-amd64 version
+        echo "### Built Omnibus Version" >> $GITHUB_STEP_SUMMARY
+        ./geth-linux-amd64 --help | grep omnibus >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
 
     - name: upload artifacts
       uses: actions/upload-artifact@v1
