@@ -384,6 +384,11 @@ var (
 		Usage:    "Disables price exemptions for locally submitted transactions",
 		Category: flags.TxPoolCategory,
 	}
+	TxPoolNoRemotesFlag = &cli.BoolFlag{
+		Name:  "txpool.noremotes",
+		Usage: "Disables adding remote transactions to the pool",
+		Category: flags.TxPoolCategory,
+	}
 	TxPoolJournalFlag = &cli.StringFlag{
 		Name:     "txpool.journal",
 		Usage:    "Disk journal for local transaction to survive node restarts",
@@ -1566,6 +1571,9 @@ func setTxPool(ctx *cli.Context, cfg *core.TxPoolConfig) {
 	}
 	if ctx.IsSet(TxPoolNoLocalsFlag.Name) {
 		cfg.NoLocals = ctx.Bool(TxPoolNoLocalsFlag.Name)
+	}
+	if ctx.IsSet(TxPoolNoRemotesFlag.Name) {
+		cfg.NoRemotes = ctx.Bool(TxPoolNoRemotesFlag.Name)
 	}
 	if ctx.IsSet(TxPoolJournalFlag.Name) {
 		cfg.Journal = ctx.String(TxPoolJournalFlag.Name)
