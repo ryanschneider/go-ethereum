@@ -118,10 +118,13 @@ func (s *Server) serveSingleRequest(ctx context.Context, codec ServerCodec) {
 		return
 	}
 
+	ctxPeerInfo := PeerInfoFromContext(ctx)
 	h := newHandler(ctx, codec, s.idgen, &s.services)
 	h.allowSubscribe = false
+	if f := ctxPeerInfo.HTTP.PostServeCallback; f != nil {
+		h.postServeCb = f
+	}
 	defer h.close(io.EOF, nil)
-
 	reqs, batch, err := codec.readBatch()
 	if err != nil {
 		if err != io.EOF {
@@ -191,6 +194,9 @@ type PeerInfo struct {
 		UserAgent string
 		Origin    string
 		Host      string
+
+		// Function to assist w/ writing custom HTTP headers
+		PostServeCallback func() `json:"-"`
 	}
 }
 
@@ -203,4 +209,19 @@ type peerInfoContextKey struct{}
 func PeerInfoFromContext(ctx context.Context) PeerInfo {
 	info, _ := ctx.Value(peerInfoContextKey{}).(PeerInfo)
 	return info
+}
+
+type ResponseAudit struct {
+	UsedGas *uint64
+}
+
+type responseAuditKey struct{}
+
+func ResponseAuditFromContext(ctx context.Context) *ResponseAudit {
+	audit, _ := ctx.Value(responseAuditKey{}).(*ResponseAudit)
+	if audit == nil {
+		// return a write-only pointer that'll be discarded
+		return &ResponseAudit{}
+	}
+	return audit
 }

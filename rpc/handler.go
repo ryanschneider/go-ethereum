@@ -60,6 +60,7 @@ type handler struct {
 	conn           jsonWriter                     // where responses will be sent
 	log            log.Logger
 	allowSubscribe bool
+	postServeCb    func()
 
 	subLock    sync.Mutex
 	serverSubs map[ID]*Subscription
@@ -428,6 +429,9 @@ func (h *handler) handleCallMsg(ctx *callProc, msg *jsonrpcMessage) *jsonrpcMess
 			h.log.Warn("Served "+msg.Method, ctx...)
 		} else {
 			h.log.Debug("Served "+msg.Method, ctx...)
+		}
+		if h.postServeCb != nil {
+			h.postServeCb()
 		}
 		return resp
 	case msg.hasValidID():

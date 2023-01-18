@@ -321,12 +321,23 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create request-scoped context.
+	audit := &ResponseAudit{}
+
 	connInfo := PeerInfo{Transport: "http", RemoteAddr: r.RemoteAddr}
 	connInfo.HTTP.Version = r.Proto
 	connInfo.HTTP.Host = r.Host
 	connInfo.HTTP.Origin = r.Header.Get("Origin")
 	connInfo.HTTP.UserAgent = r.Header.Get("User-Agent")
+	connInfo.HTTP.PostServeCallback = func() {
+		// If the context has set UsedGas for auditing, write it as a header value
+		if h := r.Header.Get("x-eth-report-used-gas"); h != "" {
+			if audit.UsedGas != nil {
+				w.Header().Set("x-eth-used-gas", fmt.Sprintf("0x%x", *audit.UsedGas))
+			}
+		}
+	}
 	ctx := r.Context()
+	ctx = context.WithValue(ctx, responseAuditKey{}, audit)
 	ctx = context.WithValue(ctx, peerInfoContextKey{}, connInfo)
 
 	// All checks passed, create a codec that reads directly from the request body
