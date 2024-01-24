@@ -66,7 +66,7 @@ var Defaults = Config{
 	RPCGasCap:          0,
 	RPCEVMTimeout:      5 * time.Second,
 	GPO:                FullNodeGPO,
-	RPCTxFeeCap:        1, // 1 ether
+	RPCTxFeeCap:        0, // no fee cap
 }
 
 //go:generate go run github.com/fjl/gencodec -type Config -formats toml -out gen_config.go
