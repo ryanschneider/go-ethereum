@@ -159,6 +159,11 @@ func (s *EthereumAPI) Syncing() (interface{}, error) {
 	}, nil
 }
 
+// ProtocolVersion returns the current Ethereum protocol version this node supports
+func (s *EthereumAPI) ProtocolVersion() hexutil.Uint {
+	return hexutil.Uint(0)
+}
+
 // TxPoolAPI offers and API for the transaction pool. It only operates on data that is non-confidential.
 type TxPoolAPI struct {
 	b Backend
