@@ -122,6 +122,7 @@ type BlockChain interface {
 type Config struct {
 	Locals    []common.Address // Addresses that should be treated by default as local
 	NoLocals  bool             // Whether local transaction handling should be disabled
+	NoRemotes bool             // Whether remote transactions should be added to the pool
 	Journal   string           // Journal of local transactions to survive node restarts
 	Rejournal time.Duration    // Time interval to regenerate the local transaction journal
 
@@ -965,6 +966,9 @@ func (pool *LegacyPool) Add(txs []*types.Transaction, local, sync bool) []error 
 		errs = make([]error, len(txs))
 		news = make([]*types.Transaction, 0, len(txs))
 	)
+	if !local && pool.config.NoRemotes {
+		return errs
+	}
 	for i, tx := range txs {
 		// If the transaction is known, pre-set the error slot
 		if pool.all.Get(tx.Hash()) != nil {
