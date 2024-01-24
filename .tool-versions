@@ -1,0 +1,2 @@
+# keep golang version here in sync w/ versions in .github/workflows/push.yaml
+golang 1.21.6
